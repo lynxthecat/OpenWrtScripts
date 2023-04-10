@@ -17,6 +17,7 @@
 # -p | --ping:   Host to ping to measure latency (default - gstatic.com)
 # -i | --idle:   Don't send traffic, only measure idle latency
 # -n | --number: Number of simultaneous sessions (default - 5 sessions)
+# -b | --bidir:  Test bidirectional download and upload 
 
 # Copyright (c) 2014-2022 - Rich Brown rich.brown@blueberryhillsoftware.com
 # GPLv2
@@ -168,13 +169,14 @@ measure_direction() {
   do
     netperf "$TESTPROTO" -H "$TESTHOST" -t "$dir" -l "$TESTDUR" -v 0 -P 0 >> "$SPEEDFILE" &
     # echo "Starting PID $! params: $TESTPROTO -H $TESTHOST -t $dir -l $TESTDUR -v 0 -P 0 >> $SPEEDFILE"
+    pids="$! $pids"
   done
   
   # Wait until each of the background netperf processes completes 
   # echo "Process is $$"
   # echo `pgrep -P $$ netperf `
 
-  for i in $(pgrep -P $$ netperf )   # gets a list of PIDs for child processes named 'netperf'
+  for i in $pids   # gets a list of PIDs for child processes named 'netperf'
   do
     #echo "Waiting for $i"
     wait "$i"
@@ -214,6 +216,7 @@ PINGHOST="gstatic.com"
 MAXSESSIONS="5"
 TESTPROTO="-4"
 IDLETEST=false
+BIDIR=false
 
 # read the options
 
@@ -244,8 +247,10 @@ do
         esac ;;
       -i|--idle)
         IDLETEST=true ; shift 1 ;;
-      --) shift ; break ;;
-        *) echo "Usage: sh betterspeedtest.sh [-4 -6] [ -H netperf-server ] [ -t duration ] [ -p host-to-ping ] [ -n simultaneous-sessions ] [ --idle ]" ; exit 1 ;;
+      -b|--bidir)
+      	BIDIR=true ; shift 1 ;;
+       --) shift ; break ;;
+        *) echo "Usage: sh betterspeedtest.sh [-4 -6] [ -H netperf-server ] [ -t duration ] [ -p host-to-ping ] [ -n simultaneous-sessions ] [ -i --idle ] [ -b --bidir ]" ; exit 1 ;;
     esac
 done
 
@@ -271,8 +276,12 @@ then
   summarize_pings "$PINGFILE"
   clean_up
 
+elif $BIDIR
+then
+  echo "$DATE Testing against $TESTHOST ($PROTO) with $MAXSESSIONS simultaneous sessions while pinging $PINGHOST ($TESTDUR seconds in each direction)"
+  measure_direction "Download" & measure_direction "  Upload" 
 else
   echo "$DATE Testing against $TESTHOST ($PROTO) with $MAXSESSIONS simultaneous sessions while pinging $PINGHOST ($TESTDUR seconds in each direction)"
-  measure_direction "Download" 
+  measure_direction "Download"
   measure_direction "  Upload" 
 fi
